@@ -5,7 +5,7 @@ failed_node_id=$1
 old_primary_node_id=$2
 new_primary_hostname=$3
 
-#REPLICATION_PASSWORD=$(cat /run/secrets/replication_pass)
+REPLICATION_PASSWORD=$(cat /run/secrets/replication_pass)
 
 # Restore the failed primary as a replica.
 if [ $failed_node_id == 0 ]; then

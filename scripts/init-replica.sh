@@ -20,4 +20,4 @@ cp /etc/postgresql/pg_hba.conf /var/lib/postgresql/data/pg_hba.conf
 pg_ctl start -D /var/lib/postgresql/data
 
 pg_ctl reload
-echo "Done."
+echo "Done init-replica.sh."

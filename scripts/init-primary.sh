@@ -9,8 +9,15 @@ REPLICATION_PASSWORD=$(cat /run/secrets/replication_password)
 READER_PASSWORD=$(cat /run/secrets/reader_password)
 WRITER_PASSWORD=$(cat /run/secrets/writer_password)
 
-echo "Running init-db.sh"
+echo "Running init-primary.sh"
 
+echo "Copying configuration files from /etc/postgres to /var/lib/postgresql/data"
+cp /etc/postgresql/postgresql.conf /var/lib/postgresql/data/postgresql.conf
+cp /etc/postgresql/pg_hba.conf /var/lib/postgresql/data/pg_hba.conf
+echo "Reloading configuration files"
+pg_ctl reload
+
+echo "Creating objects"
 PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
     CREATE DATABASE topaz;
 EOSQL
@@ -34,7 +41,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 --username "$POSTGRES_US
     GRANT CONNECT ON DATABASE topaz TO writer;
 EOSQL
 
-# Database-specific commands
+# Commands are run on the given database
 PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -d topaz <<-EOSQL
     CREATE SCHEMA imdb;
     GRANT USAGE ON SCHEMA imdb TO writer;
@@ -45,4 +52,4 @@ PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 --username "$POSTGRES_US
     ALTER DEFAULT PRIVILEGES IN SCHEMA imdb GRANT SELECT ON TABLES TO reader;
 EOSQL
 
-echo "Done init-db.sh"
+echo "Done init-primary.sh"
