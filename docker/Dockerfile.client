@@ -1,0 +1,16 @@
+FROM postgres:14
+
+#RUN apt-get update && \
+#    apt-get install -y \
+#        postgresql-client \
+#        curl \
+#        ca-certificates && \
+#    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -ms /bin/bash sqlclient && \
+    mkdir -p /home/sqlclient && chown -R sqlclient:sqlclient /home/sqlclient
+
+USER sqlclient
+WORKDIR /home/sqlclient
+
+CMD ["bash"]

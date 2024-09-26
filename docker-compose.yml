@@ -1,0 +1,176 @@
+# PostgreSQL Cluster "Topaz" v2
+
+# One thing that might be a problem is if we want to run more bash scripts when the container starts,
+# they will not run from docker-entrypoint-initdb.d if the database already has some data in the volume.
+
+services:
+
+  postgres-primary:
+    image: postgres:14
+    container_name: postgres-primary
+#    restart: unless-stopped
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - ./postgresql/prod/postgresql.conf:/var/lib/postgresql/data/postgresql.conf
+      - ./postgresql/prod/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      - ./postgresql/pg_archive:/var/lib/postgresql/pg_archive # We store WAL files on fast disk because we can, and clean it up regularly (see ./postgresql/postgresql.conf)
+      - postgres-primary-data:/var/lib/postgresql/data
+      - ./scripts/init-primary.sh:/docker-entrypoint-initdb.d/init-db.sh # PostgreSQL automatically runs all SQL and shell scripts here during database initialization
+    networks:
+      - postgres-network
+    secrets:
+      - postgres_user
+      - postgres_password
+      - replication_password
+      - pgpool_password
+      - reader_password
+      - writer_password
+
+  postgres-replica-1:
+    image: postgres:14
+    container_name: postgres-replica-1
+#    restart: unless-stopped
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - ./postgresql/postgresql.replica.conf:/etc/postgresql/postgresql.conf
+      - ./postgresql/prod/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - postgres-replica-1-data:/var/lib/postgresql/data
+      - ./scripts/init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh
+    networks:
+      - postgres-network
+    secrets:
+      - postgres_user
+      - postgres_password
+      - replication_password
+    depends_on:
+      - postgres-primary
+
+  postgres-replica-2:
+    image: postgres:14
+    container_name: postgres-replica-2
+#    restart: unless-stopped
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - ./postgresql/postgresql.replica.conf:/etc/postgresql/postgresql.conf
+      - ./postgresql/prod/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - postgres-replica-2-data:/var/lib/postgresql/data
+      - ./scripts/init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh
+    networks:
+      - postgres-network
+    secrets:
+      - postgres_user
+      - postgres_password
+      - replication_password
+    depends_on:
+      - postgres-primary
+
+  pgpool-proxy:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.pgpool
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: topaz-pgpool:latest
+    container_name: pgpool-proxy
+#    restart: unless-stopped
+    environment:
+      - PGPOOL_CONFIG_FILE=/etc/pgpool2/pgpool.conf
+      - PGPOOL_USER=pgpool_user
+      - PGPOOL_PASSWORD_FILE=/run/secrets/pgpool_password
+      - PGPOOL_SR_CHECK_USER=replication_user # SR check user means stream replication check user
+      - PGPOOL_SR_CHECK_PASSWORD_FILE=/run/secrets/replication_password
+      - PCP_USER=pcp_user
+      - PCP_PASSWORD_FILE=/run/secrets/pgpool_pcp_password
+      - PGPOOLKEYFILE=/run/secrets/.pgpoolkey
+    volumes:
+      - ./pgpool/pgpool.conf:/etc/pgpool2/pgpool.conf
+      - ./pgpool/pcp.conf:/etc/pgpool2/pcp.conf
+      - ./pgpool/pool_passwd:/etc/pgpool2/pool_passwd
+      - ./pgpool/pool_hba.conf:/etc/pgpool2/pool_hba.conf
+      - ./scripts/failover.sh:/usr/local/bin/failover.sh
+      - ./scripts/failback.sh:/usr/local/bin/failback.sh
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres-network
+      - proxy-network
+    secrets:
+      - replication_password
+      - pgpool_password
+      - pgpool_pcp_password
+      - pgpool_key
+    depends_on:
+      - postgres-primary
+      - postgres-replica-1
+      - postgres-replica-2
+
+  psql-client:
+    # A simple container for testing connections using psql
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.client
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: topaz-client:latest
+    container_name: psql01
+    tty: true
+    networks: # TODO: remove network here
+      - proxy-network
+
+volumes:
+  postgres-primary-data:
+    name: postgres-primary-data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /media/iridium/db/postgresql/postgres-primary-data
+  postgres-replica-1-data:
+    name: postgres-replica-1-data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /media/iridium/db/postgresql/postgres-replica-1-data
+  postgres-replica-2-data:
+    name: postgres-replica-2-data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /media/iridium/db/postgresql/postgres-replica-2-data
+
+secrets:
+  postgres_user:
+    file: ./secrets/postgres_user
+  postgres_password:
+    file: ./secrets/postgres_password
+  replication_password:
+    file: ./secrets/replication_password
+  pgpool_password:
+    file: ./secrets/pgpool_password
+  reader_password:
+    file: ./secrets/reader_password
+  writer_password:
+    file: ./secrets/writer_password
+  pgpool_pcp_password:
+    file: ./secrets/pgpool_pcp_password
+  pgpool_key:
+    file: ./secrets/.pgpoolkey
+
+networks:
+  postgres-network:
+    name: postgres-network
+    driver: bridge
+    internal: true
+  proxy-network:
+    name: proxy-network
+    driver: bridge
