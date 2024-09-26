@@ -1,6 +1,6 @@
 # PostgreSQL Cluster "Topaz" v2
 
-# One thing that might be a problem is if we want to run more bash scripts when the container starts,
+# One thing that might be a problem is if we want to run more bash scripts when the container starts/restarts,
 # they will not run from docker-entrypoint-initdb.d if the database already has some data in the volume.
 
 services:
@@ -13,10 +13,10 @@ services:
       POSTGRES_USER_FILE: /run/secrets/postgres_user
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     volumes:
-      - ./postgresql/prod/postgresql.conf:/var/lib/postgresql/data/postgresql.conf
-      - ./postgresql/prod/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
-      - ./postgresql/pg_archive:/var/lib/postgresql/pg_archive # We store WAL files on fast disk because we can, and clean it up regularly (see ./postgresql/postgresql.conf)
       - postgres-primary-data:/var/lib/postgresql/data
+      - ./postgresql/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./postgresql/pg_archive:/var/lib/postgresql/pg_archive # We store WAL files on fast disk because we can, and clean it up regularly (see ./postgresql/postgresql.conf)
       - ./scripts/init-primary.sh:/docker-entrypoint-initdb.d/init-db.sh # PostgreSQL automatically runs all SQL and shell scripts here during database initialization
     networks:
       - postgres-network
@@ -36,9 +36,9 @@ services:
       POSTGRES_USER_FILE: /run/secrets/postgres_user
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     volumes:
-      - ./postgresql/postgresql.replica.conf:/etc/postgresql/postgresql.conf
-      - ./postgresql/prod/pg_hba.conf:/etc/postgresql/pg_hba.conf
       - postgres-replica-1-data:/var/lib/postgresql/data
+      - ./postgresql/postgresql.replica.conf:/etc/postgresql/postgresql.conf
+      - ./postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf
       - ./scripts/init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh
     networks:
       - postgres-network
@@ -57,9 +57,9 @@ services:
       POSTGRES_USER_FILE: /run/secrets/postgres_user
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     volumes:
-      - ./postgresql/postgresql.replica.conf:/etc/postgresql/postgresql.conf
-      - ./postgresql/prod/pg_hba.conf:/etc/postgresql/pg_hba.conf
       - postgres-replica-2-data:/var/lib/postgresql/data
+      - ./postgresql/postgresql.replica.conf:/etc/postgresql/postgresql.conf
+      - ./postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf
       - ./scripts/init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh
     networks:
       - postgres-network
@@ -88,7 +88,7 @@ services:
       - PGPOOL_SR_CHECK_PASSWORD_FILE=/run/secrets/replication_password
       - PCP_USER=pcp_user
       - PCP_PASSWORD_FILE=/run/secrets/pgpool_pcp_password
-      - PGPOOLKEYFILE=/run/secrets/.pgpoolkey
+      - PGPOOLKEYFILE=/run/secrets/pgpoolkey
     volumes:
       - ./pgpool/pgpool.conf:/etc/pgpool2/pgpool.conf
       - ./pgpool/pcp.conf:/etc/pgpool2/pcp.conf
@@ -105,7 +105,7 @@ services:
       - replication_password
       - pgpool_password
       - pgpool_pcp_password
-      - pgpool_key
+      - pgpoolkey
     depends_on:
       - postgres-primary
       - postgres-replica-1
@@ -163,8 +163,8 @@ secrets:
     file: ./secrets/writer_password
   pgpool_pcp_password:
     file: ./secrets/pgpool_pcp_password
-  pgpool_key:
-    file: ./secrets/.pgpoolkey
+  pgpoolkey:
+    file: ./secrets/pgpoolkey
 
 networks:
   postgres-network:
